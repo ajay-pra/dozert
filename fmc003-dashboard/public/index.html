@@ -1,0 +1,1249 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teltonika FMC003 Fleet Telemetry & OBD-II Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <style>
+    :root {
+      --bg: #0b1329;
+      --bg-card: #111e38;
+      --bg-card-subtle: #162646;
+      --bg-card-hover: #1b2f56;
+      --border: #233863;
+      --border-highlight: #3b82f6;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --success: #10b981;
+      --success-bg: rgba(16, 185, 129, 0.15);
+      --danger: #ef4444;
+      --danger-bg: rgba(239, 68, 68, 0.15);
+      --warning: #f59e0b;
+      --warning-bg: rgba(245, 158, 11, 0.15);
+      --info: #0ea5e9;
+      --info-bg: rgba(14, 165, 233, 0.15);
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: linear-gradient(180deg, #0f1c35 0%, #0b1329 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 18px clamp(16px, 3vw, 36px);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .header-brand { display: flex; align-items: center; gap: 14px; }
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #2563eb, #06b6d4);
+      display: grid;
+      place-items: center;
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+    }
+    .brand-icon svg { width: 24px; height: 24px; fill: white; }
+    .header-title h1 {
+      margin: 0;
+      font-size: clamp(20px, 2.4vw, 26px);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(120deg, #ffffff 40%, #93c5fd 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .header-title p {
+      margin: 3px 0 0;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+    .dot.pulsing {
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    main {
+      flex: 1;
+      max-width: 1720px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    /* Controls Bar */
+    .controls-bar {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+    }
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .control-group label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    select, button, input {
+      font-family: inherit;
+      font-size: 13px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-card-subtle);
+      color: var(--text);
+      padding: 8px 12px;
+      min-height: 38px;
+      outline: none;
+      transition: all 0.15s ease;
+    }
+    select:focus, input:focus {
+      border-color: var(--border-highlight);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+    }
+    button {
+      cursor: pointer;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    button:hover:not(:disabled) {
+      background: var(--bg-card-hover);
+      border-color: #3b82f6;
+    }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+    button.primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .controls-hint {
+      margin-left: auto;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    /* KPI Stats Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 14px;
+    }
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.18s ease, border-color 0.18s ease;
+    }
+    .kpi-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(59, 130, 246, 0.4);
+    }
+    .kpi-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .kpi-value {
+      font-size: 24px;
+      font-weight: 800;
+      margin: 8px 0 4px;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+      overflow-wrap: anywhere;
+    }
+    .kpi-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .kpi-tag {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .kpi-tag.success { background: var(--success-bg); color: #34d399; }
+    .kpi-tag.danger { background: var(--danger-bg); color: #f87171; }
+    .kpi-tag.warning { background: var(--warning-bg); color: #fbbf24; }
+    .kpi-tag.info { background: var(--info-bg); color: #38bdf8; }
+
+    /* Main Split Layout: Map & Telemetry Inspector */
+    .dashboard-split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(360px, 1fr);
+      gap: 18px;
+    }
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .panel-header h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border);
+      color: #93c5fd;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    #map {
+      height: 480px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #091122;
+      z-index: 1;
+    }
+    .map-stats-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding: 10px 14px;
+      background: var(--bg-card-subtle);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .map-stats-bar b { color: var(--text); }
+
+    /* Tabs for Telemetry Inspector */
+    .tabs {
+      display: flex;
+      gap: 6px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      overflow-x: auto;
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--text); background: var(--bg-card-subtle); }
+    .tab-btn.active {
+      color: white;
+      background: var(--accent);
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Key Value Grid Table */
+    .data-table-wrap {
+      max-height: 440px;
+      overflow-y: auto;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    table.inspect-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    table.inspect-table th, table.inspect-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    table.inspect-table th {
+      width: 42%;
+      color: var(--text-muted);
+      font-weight: 600;
+      background: var(--bg-card-subtle);
+    }
+    table.inspect-table td {
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+    table.inspect-table tr:last-child th, table.inspect-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* Records History Table */
+    .table-tools {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    .table-view-pills {
+      display: flex;
+      gap: 6px;
+    }
+    .view-btn {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border);
+      padding: 5px 11px;
+      font-size: 12px;
+      border-radius: 6px;
+      color: var(--text-muted);
+    }
+    .view-btn.active {
+      background: var(--border-highlight);
+      border-color: var(--border-highlight);
+      color: white;
+    }
+
+    .main-table-wrap {
+      overflow-x: auto;
+      max-height: 540px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg-card);
+    }
+    table.records-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    table.records-table th, table.records-table td {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    table.records-table th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--bg-card-subtle);
+      color: #cbd5e1;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+    }
+    table.records-table tbody tr {
+      cursor: pointer;
+      transition: background 0.1s ease;
+    }
+    table.records-table tbody tr:hover {
+      background: var(--bg-card-hover);
+    }
+    table.records-table tbody tr.selected {
+      background: rgba(37, 99, 235, 0.25);
+      outline: 1px solid var(--border-highlight);
+    }
+    .table-empty {
+      padding: 36px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    pre.code-block {
+      margin: 0;
+      padding: 12px;
+      background: #091122;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      color: #93c5fd;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      max-height: 380px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    @media (max-width: 1150px) {
+      .dashboard-split { grid-template-columns: 1fr; }
+      #map { height: 400px; }
+    }
+    @media (max-width: 640px) {
+      main { padding: 12px; }
+      .controls-bar>* { width: 100%; }
+      .controls-hint { margin-left: 0; }
+      .kpi-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <div class="brand-icon">
+      <svg viewBox="0 0 24 24"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
+    </div>
+    <div class="header-title">
+      <h1>Teltonika FMC003 Telemetry Dashboard</h1>
+      <p>OBD-II CAN diagnostics, real-time GPS route tracking & AVL Codec 8 Extended parser · IST Timezone (+05:30)</p>
+    </div>
+  </div>
+  <div class="header-status">
+    <div class="status-badge" id="vehicleBadge">
+      <span class="dot pulsing"></span>
+      <span id="headerVehicleStatus">Connecting…</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- Controls Bar -->
+  <section class="controls-bar">
+    <div class="control-group">
+      <label for="month">Month</label>
+      <select id="month"><option value="">Loading months…</option></select>
+    </div>
+    <div class="control-group">
+      <label for="day">Date</label>
+      <select id="day" disabled><option value="">Choose date</option></select>
+    </div>
+    <button id="load" class="primary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+      Load Data
+    </button>
+    <button id="downloadJson" disabled>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      JSON
+    </button>
+    <button id="downloadDateExcel" disabled>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      Date Excel (.xlsx)
+    </button>
+    <button id="downloadMonthExcel" disabled>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Month Excel (.xlsx)
+    </button>
+    <span class="controls-hint" id="loadStatus">Ready</span>
+  </section>
+
+  <!-- KPI Metrics Grid -->
+  <section class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Vehicle VIN <span class="kpi-tag info" id="vinTag">OBD</span></div>
+      <div class="kpi-value" id="vinVal" style="font-size: 17px; font-family: 'JetBrains Mono', monospace;">—</div>
+      <div class="kpi-sub">IMEI: <span id="imeiVal">—</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Speed & Ignition <span class="kpi-tag" id="ignitionTag">—</span></div>
+      <div class="kpi-value" id="speedVal">— <span style="font-size: 15px; font-weight: normal; color: var(--text-muted);">km/h</span></div>
+      <div class="kpi-sub">OBD Speed: <span id="obdSpeedVal">—</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Engine RPM & Coolant <span class="kpi-tag info">Live Engine</span></div>
+      <div class="kpi-value" id="engineRpmVal">— <span style="font-size: 15px; font-weight: normal; color: var(--text-muted);">RPM</span></div>
+      <div class="kpi-sub">Coolant: <span id="coolantVal">—</span> · Fuel: <span id="fuelVal">—</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Power & Alternator <span class="kpi-tag success" id="batteryHealthTag">OK</span></div>
+      <div class="kpi-value" id="extVoltVal">— <span style="font-size: 15px; font-weight: normal; color: var(--text-muted);">V</span></div>
+      <div class="kpi-sub">Internal Li-Po: <span id="intVoltVal">—</span> (<span id="intCurrentVal">—</span>)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Security & Tamper <span class="kpi-tag success" id="unplugTag">Connected</span></div>
+      <div class="kpi-value" id="unplugVal" style="font-size: 18px;">Normal</div>
+      <div class="kpi-sub">DTC Faults: <span id="dtcCountVal">0</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Total Records <span class="kpi-tag info" id="recordsTag">Date</span></div>
+      <div class="kpi-value" id="recordsCount">—</div>
+      <div class="kpi-sub">Odometer: <span id="odometerVal">—</span></div>
+    </div>
+  </section>
+
+  <!-- Map and Telemetry Inspector -->
+  <div class="dashboard-split">
+    <!-- Map Panel -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+          GPS Route Playback
+        </h2>
+        <span class="pill" id="pointsPill">0 GPS Points</span>
+      </div>
+      <div id="map"></div>
+      <div class="map-stats-bar">
+        <div>Points: <b id="mapPointsCount">0</b></div>
+        <div>Max Speed: <b id="mapMaxSpeed">0 km/h</b></div>
+        <div>Distance: <b id="mapDistance">0 km</b></div>
+        <div>Latest Fix: <b id="mapFixStatus">—</b></div>
+      </div>
+    </section>
+
+    <!-- Telemetry Inspector Panel -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="M2 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="M12 22v-4"/><path d="m19.07 19.07-2.83-2.83"/><path d="M22 12h-4"/><path d="m19.07 4.93-2.83 2.83"/><circle cx="12" cy="12" r="3"/></svg>
+          Telemetry & Diagnostics Inspector
+        </h2>
+        <span class="pill" id="inspectTimestamp">No record selected</span>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="tab-obd">🚗 OBD-II & Engine</button>
+        <button class="tab-btn" data-tab="tab-power">⚡ Power & Security</button>
+        <button class="tab-btn" data-tab="tab-gnss">🛰️ Location & GSM</button>
+        <button class="tab-btn" data-tab="tab-raw-io">🔍 Teltonika I/O Map</button>
+        <button class="tab-btn" data-tab="tab-json">📦 Raw JSON</button>
+      </div>
+
+      <!-- Tab 1: OBD-II -->
+      <div class="tab-content active" id="tab-obd">
+        <div class="data-table-wrap">
+          <table class="inspect-table"><tbody id="tableObd"><tr><td colspan="2" class="table-empty">Select a date or row to inspect telemetry.</td></tr></tbody></table>
+        </div>
+      </div>
+
+      <!-- Tab 2: Power & Security -->
+      <div class="tab-content" id="tab-power">
+        <div class="data-table-wrap">
+          <table class="inspect-table"><tbody id="tablePower"><tr><td colspan="2" class="table-empty">Select a date or row to inspect telemetry.</td></tr></tbody></table>
+        </div>
+      </div>
+
+      <!-- Tab 3: GNSS & GSM -->
+      <div class="tab-content" id="tab-gnss">
+        <div class="data-table-wrap">
+          <table class="inspect-table"><tbody id="tableGnss"><tr><td colspan="2" class="table-empty">Select a date or row to inspect telemetry.</td></tr></tbody></table>
+        </div>
+      </div>
+
+      <!-- Tab 4: Raw Teltonika I/O Lookup -->
+      <div class="tab-content" id="tab-raw-io">
+        <div class="data-table-wrap">
+          <table class="inspect-table">
+            <thead>
+              <tr style="background:var(--bg-card-subtle);">
+                <th style="width:15%">ID</th>
+                <th style="width:35%">Parameter</th>
+                <th>Raw Value</th>
+              </tr>
+            </thead>
+            <tbody id="tableRawIo"><tr><td colspan="3" class="table-empty">No I/O data.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab 5: Raw JSON -->
+      <div class="tab-content" id="tab-json">
+        <pre class="code-block" id="recordJson">No record loaded.</pre>
+      </div>
+    </section>
+  </div>
+
+  <!-- Records Table -->
+  <section class="panel">
+    <div class="table-tools">
+      <div class="panel-header">
+        <h2>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+          Daily Telemetry Records
+        </h2>
+        <span class="pill" id="tableRowsPill">0 rows</span>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+        <input type="text" id="tableSearch" placeholder="Filter records by speed, time, status…" style="width:260px;">
+        <div class="table-view-pills">
+          <button class="view-btn active" data-view="standard">Standard</button>
+          <button class="view-btn" data-view="obd">OBD-II CAN</button>
+          <button class="view-btn" data-view="diagnostics">Diagnostics</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-table-wrap">
+      <table class="records-table">
+        <thead id="recordsThead">
+          <!-- Filled dynamically by view -->
+        </thead>
+        <tbody id="recordsTbody">
+          <tr><td colspan="12" class="table-empty">Select a date above and click "Load Data".</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const monthSelect = $("month"), daySelect = $("day");
+  let records = [], filteredRecords = [], map, routeLine, markersLayer, selectedMarker;
+  let currentView = "standard";
+
+  // Official Teltonika FMC003 AVL Parameters ID Dictionary
+  const TELTONIKA_IO_NAMES = {
+    1: { name: "Digital Input 1", desc: "Digital input status (0/1)" },
+    2: { name: "Digital Input 2", desc: "Digital input status (0/1)" },
+    3: { name: "Digital Input 3", desc: "Digital input status (0/1)" },
+    6: { name: "Analog Input 2", desc: "Voltage (V)" },
+    9: { name: "Analog Input 1", desc: "Voltage (V)" },
+    10: { name: "SD Status", desc: "0 = Not present, 1 = Present" },
+    11: { name: "ICCID 1", desc: "SIM ICCID MSB" },
+    12: { name: "Fuel Used GPS", desc: "Calculated fuel used (Litres)" },
+    13: { name: "Fuel Rate GPS", desc: "Average fuel rate (L/100km)" },
+    14: { name: "ICCID 2", desc: "SIM ICCID LSB" },
+    16: { name: "Total Odometer", desc: "Total distance in meters" },
+    17: { name: "Axis X", desc: "Accelerometer X axis (mG)" },
+    18: { name: "Axis Y", desc: "Accelerometer Y axis (mG)" },
+    19: { name: "Axis Z", desc: "Accelerometer Z axis (mG)" },
+    21: { name: "GSM Signal", desc: "GSM signal strength (1-5)" },
+    24: { name: "GNSS Speed", desc: "Speed from GPS (km/h)" },
+    30: { name: "Number of DTC", desc: "Count of OBD trouble codes" },
+    31: { name: "Engine Load", desc: "Calculated engine load (%)" },
+    32: { name: "Coolant Temperature", desc: "Engine coolant temp (°C)" },
+    33: { name: "Short Fuel Trim", desc: "Short term fuel trim (%)" },
+    34: { name: "Fuel Pressure", desc: "Fuel pressure (kPa)" },
+    35: { name: "Intake MAP", desc: "Manifold absolute pressure (kPa)" },
+    36: { name: "Engine RPM", desc: "Engine rotational speed (RPM)" },
+    37: { name: "Vehicle Speed", desc: "Speed reported by OBD (km/h)" },
+    38: { name: "Timing Advance", desc: "Ignition timing advance (°)" },
+    39: { name: "Intake Air Temperature", desc: "Intake air temp (°C)" },
+    40: { name: "MAF", desc: "Mass air flow rate (g/sec)" },
+    41: { name: "Throttle Position", desc: "Throttle valve position (%)" },
+    42: { name: "Runtime Engine Start", desc: "Time since engine start (s)" },
+    43: { name: "Distance MIL On", desc: "Distance with Check Engine (km)" },
+    48: { name: "Fuel Level", desc: "Fuel tank level (%)" },
+    49: { name: "Distance Codes Cleared", desc: "Distance since DTC clear (km)" },
+    50: { name: "Barometric Pressure", desc: "Barometric air pressure (kPa)" },
+    51: { name: "Control Module Voltage", desc: "ECU control voltage (V)" },
+    52: { name: "Absolute Load Value", desc: "Absolute load (%)" },
+    53: { name: "Ambient Air Temperature", desc: "Outside air temp (°C)" },
+    58: { name: "Engine Oil Temperature", desc: "Engine oil temp (°C)" },
+    60: { name: "Fuel Rate", desc: "Engine fuel rate (L/h)" },
+    66: { name: "External Voltage", desc: "Car battery / alternator voltage (V)" },
+    67: { name: "Battery Voltage", desc: "Internal Li-Po battery voltage (V)" },
+    68: { name: "Battery Current", desc: "Li-Po battery current (A)" },
+    69: { name: "GNSS Status", desc: "0=Off, 1=Fix, 2=No Fix, 3=Sleep" },
+    80: { name: "Data Mode", desc: "Home/Roaming On Stop/Moving" },
+    113: { name: "Battery Level", desc: "Battery charge capacity (%)" },
+    175: { name: "Auto Geofence", desc: "0=Left, 1=Entered" },
+    179: { name: "Digital Output 1", desc: "Output status (0/1)" },
+    181: { name: "GNSS PDOP", desc: "Position dilution of precision" },
+    182: { name: "GNSS HDOP", desc: "Horizontal dilution of precision" },
+    199: { name: "Trip Odometer", desc: "Trip distance in meters" },
+    200: { name: "Sleep Mode", desc: "0=None, 1=GPS, 2=Deep, 3=Online" },
+    205: { name: "GSM Cell ID", desc: "Base station Cell ID" },
+    206: { name: "GSM Area Code", desc: "Location Area Code (LAC)" },
+    237: { name: "Network Type", desc: "1=GSM, 2=4G, 3=LTE-M, 4=NB-IoT" },
+    239: { name: "Ignition", desc: "0 = Ignition Off, 1 = Ignition On" },
+    240: { name: "Movement", desc: "0 = Stopped, 1 = Moving" },
+    241: { name: "Active GSM Operator", desc: "Mobile network operator MCC+MNC" },
+    246: { name: "Towing", desc: "0=Steady, 1=Vehicle Towing" },
+    247: { name: "Crash Detection", desc: "Crash state (1-6)" },
+    249: { name: "Jamming", desc: "GSM Jamming detection" },
+    250: { name: "Trip", desc: "0 = Trip Stop, 1 = Trip Start" },
+    251: { name: "Idling", desc: "0 = Moving, 1 = Idling" },
+    252: { name: "Unplug Detection", desc: "1 = UNPLUGGED FROM OBD PORT!" },
+    253: { name: "Green Driving Type", desc: "1=Harsh Accel, 2=Brake, 3=Corner" },
+    254: { name: "Green Driving Value", desc: "Force in G" },
+    255: { name: "Over Speeding", desc: "Speed above limit (km/h)" },
+    256: { name: "VIN Number", desc: "Vehicle Identification Number" },
+    281: { name: "Fault Codes (DTC)", desc: "Comma-separated OBD fault codes" },
+    389: { name: "OBD OEM Total Mileage", desc: "True cluster odometer (km)" },
+    390: { name: "OBD OEM Fuel Level", desc: "Fuel level in litres" },
+    402: { name: "OEM Distance Service", desc: "Distance till next service (km)" },
+    410: { name: "OEM Battery Charge State", desc: "0=Not charging, 1=Charging" },
+    411: { name: "OEM Battery Charge Level", desc: "Battery charge level (%)" },
+    449: { name: "Ignition On Counter", desc: "Duration ignition ON (s)" },
+    755: { name: "OEM Remaining Distance", desc: "Range until empty (km)" },
+    759: { name: "Fuel Type", desc: "1=Gasoline, 4=Diesel, 6=CNG, 8=EV" },
+    1151: { name: "OEM Battery SoH", desc: "Battery State of Health (%)" },
+    1152: { name: "OEM Battery Temperature", desc: "Battery pack temp (°C)" },
+    1176: { name: "ELD Mileage", desc: "ELD vehicle total distance (km)" },
+    1177: { name: "ELD Engine Hours", desc: "Total engine hours (h)" },
+    1194: { name: "ELD Seat Belt Status", desc: "0=Unbuckled, 1=Buckled" },
+    13201: { name: "PCB Temperature", desc: "Device board temperature (°C)" }
+  };
+
+  const fmt = (v, unit = "") => {
+    if (v === undefined || v === null || v === "") return "—";
+    return unit ? `${v} ${unit}` : String(v);
+  };
+
+  // Helper to resolve parameters from decoded fields or rawIo fallback
+  const getParam = (r, key) => {
+    if (!r) return undefined;
+    if (r[key] !== undefined && r[key] !== null) return r[key];
+    const raw = r.rawIo || {};
+    if (key === "vin") return raw[256]?.utf8?.trim();
+    if (key === "faultCodes") return raw[281]?.utf8?.trim();
+    if (key === "unplugAlert") return raw[252] !== undefined ? raw[252] === 1 : undefined;
+    if (key === "activeGsmOperator") return raw[241];
+    if (key === "gnssStatus") return raw[69];
+    if (key === "pdop") return raw[181] ? Number(raw[181]) / 10 : undefined;
+    if (key === "hdop") return raw[182] ? Number(raw[182]) / 10 : undefined;
+    if (key === "coolantTemperature" && raw[32] !== undefined) {
+      return raw[32] >= 128 ? raw[32] - 256 : raw[32];
+    }
+    return undefined;
+  };
+
+  const gpsOf = r => r.gps || {
+    latitude: r.latitude, longitude: r.longitude, altitude: r.altitude,
+    angle: r.angle, satellites: r.satellites, speed: r.speed
+  };
+
+  const validPoint = r => {
+    const g = gpsOf(r), lat = Number(g.latitude), lon = Number(g.longitude);
+    return Number.isFinite(lat) && Number.isFinite(lon) && lat !== 0 && lon !== 0 &&
+      Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+  };
+
+  function initMap() {
+    if (!window.L) {
+      $("mapFixStatus").textContent = "Leaflet map library could not load.";
+      return;
+    }
+    map = L.map("map").setView([20.5937, 78.9629], 5);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    markersLayer = L.featureGroup().addTo(map);
+  }
+
+  function setKpis(latest, allRecords) {
+    if (!latest) {
+      ["vinVal","imeiVal","speedVal","obdSpeedVal","engineRpmVal","coolantVal","fuelVal","extVoltVal","intVoltVal","intCurrentVal","unplugVal","dtcCountVal","recordsCount","odometerVal"].forEach(id => $(id).textContent = "—");
+      $("ignitionTag").textContent = "—";
+      $("ignitionTag").className = "kpi-tag";
+      $("headerVehicleStatus").textContent = "No data loaded";
+      return;
+    }
+
+    const g = gpsOf(latest);
+    const vin = getParam(latest, "vin") || "—";
+    const imei = latest.imei || "—";
+    const speed = g.speed != null ? g.speed : "—";
+    const obdSpeed = latest.vehicleSpeed ?? latest.obdSpeed ?? "—";
+    const ignition = latest.ignition ?? (latest.rawIo?.[239] === 1);
+    const rpm = latest.engineRpm ?? "—";
+    const coolant = getParam(latest, "coolantTemperature");
+    const fuel = latest.fuelLevel ?? latest.oemFuelLevel ?? "—";
+    const extV = latest.externalVoltage ?? (latest.rawIo?.[66] ? Number(latest.rawIo[66]) / 1000 : null);
+    const intV = latest.batteryVoltage ?? (latest.rawIo?.[67] ? Number(latest.rawIo[67]) / 1000 : null);
+    const intA = latest.batteryCurrent ?? (latest.rawIo?.[68] != null ? `${latest.rawIo[68]} mA` : "—");
+    const unplug = getParam(latest, "unplugAlert");
+    const dtcCount = latest.dtcCount ?? latest.rawIo?.[30] ?? 0;
+    const odo = latest.totalOdometer ?? latest.rawIo?.[16] ?? 0;
+
+    $("vinVal").textContent = vin;
+    $("imeiVal").textContent = imei;
+    $("speedVal").textContent = speed;
+    $("obdSpeedVal").textContent = obdSpeed !== "—" ? `${obdSpeed} km/h` : "N/A";
+
+    const ignTag = $("ignitionTag");
+    ignTag.textContent = ignition ? "IGN ON" : "IGN OFF";
+    ignTag.className = `kpi-tag ${ignition ? "success" : "danger"}`;
+
+    $("headerVehicleStatus").textContent = ignition ? "Vehicle Active / Running" : "Ignition Off / Parked";
+
+    $("engineRpmVal").textContent = rpm !== "—" ? rpm : "—";
+    $("coolantVal").textContent = coolant != null ? `${coolant} °C` : "—";
+    $("fuelVal").textContent = fuel !== "—" ? `${fuel}%` : "—";
+
+    $("extVoltVal").textContent = extV != null ? extV.toFixed(2) : "—";
+    $("intVoltVal").textContent = intV != null ? `${intV.toFixed(2)} V` : "—";
+    $("intCurrentVal").textContent = intA;
+
+    const unplugTag = $("unplugTag"), unplugVal = $("unplugVal");
+    if (unplug) {
+      unplugTag.textContent = "TAMPER ALERT";
+      unplugTag.className = "kpi-tag danger";
+      unplugVal.textContent = "UNPLUGGED!";
+      unplugVal.style.color = "var(--danger)";
+    } else {
+      unplugTag.textContent = "CONNECTED";
+      unplugTag.className = "kpi-tag success";
+      unplugVal.textContent = "Plugged in";
+      unplugVal.style.color = "var(--success)";
+    }
+
+    $("dtcCountVal").textContent = dtcCount;
+    $("recordsCount").textContent = allRecords.length;
+    $("odometerVal").textContent = odo ? `${(odo / 1000).toFixed(2)} km` : "—";
+  }
+
+  function setInspector(r) {
+    if (!r) {
+      $("inspectTimestamp").textContent = "No record loaded";
+      return;
+    }
+    const g = gpsOf(r);
+    $("inspectTimestamp").textContent = r.timestamp || "Timestamp missing";
+
+    // Tab 1: OBD
+    const obdRows = [
+      ["VIN (Chassis Number)", getParam(r, "vin")],
+      ["Engine RPM", fmt(r.engineRpm, "RPM")],
+      ["OBD Vehicle Speed", fmt(r.vehicleSpeed ?? r.obdSpeed, "km/h")],
+      ["Coolant Temperature", fmt(getParam(r, "coolantTemperature"), "°C")],
+      ["Fuel Level", fmt(r.fuelLevel, "%")],
+      ["Engine Load", fmt(r.engineLoad, "%")],
+      ["Throttle Position", fmt(r.throttlePosition, "%")],
+      ["Intake Air Temperature", fmt(r.intakeAirTemperature, "°C")],
+      ["MAF Air Flow", fmt(r.maf, "g/s")],
+      ["Engine Runtime", fmt(r.engineRuntime, "s")],
+      ["DTC Fault Codes Count", fmt(r.dtcCount ?? r.rawIo?.[30])],
+      ["Fault Codes List", getParam(r, "faultCodes") || "None (0 faults)"],
+      ["OEM Cluster Odometer", fmt(r.oemTotalMileage, "km")],
+      ["OEM Fuel Volume", fmt(r.oemFuelLevel, "Litres")]
+    ];
+    $("tableObd").innerHTML = obdRows.map(([k, v]) => `<tr><th>${k}</th><td>${v || "—"}</td></tr>`).join("");
+
+    // Tab 2: Power & Security
+    const powerRows = [
+      ["External Power Voltage", fmt(r.externalVoltage, "V")],
+      ["Internal Li-Po Battery Voltage", fmt(r.batteryVoltage, "V")],
+      ["Battery Current", fmt(r.batteryCurrent, "A")],
+      ["Battery Capacity Level", fmt(r.batteryLevel, "%")],
+      ["Ignition Status", r.ignition != null ? (r.ignition ? "ON" : "OFF") : "—"],
+      ["Movement Status", r.movement != null ? (r.movement ? "MOVING" : "STOPPED") : "—"],
+      ["OBD Unplug Alert", getParam(r, "unplugAlert") ? "<b style='color:var(--danger)'>YES (UNPLUGGED)</b>" : "Normal (Connected)"],
+      ["Crash Detection", fmt(r.crashDetection)],
+      ["Vehicle Towing", fmt(r.towing)],
+      ["Idling Status", fmt(r.idling)],
+      ["Over Speeding", fmt(r.overSpeeding, "km/h")],
+      ["Trip State", fmt(r.tripState)],
+      ["Sleep Mode", fmt(r.sleepMode)]
+    ];
+    $("tablePower").innerHTML = powerRows.map(([k, v]) => `<tr><th>${k}</th><td>${v || "—"}</td></tr>`).join("");
+
+    // Tab 3: GNSS & GSM
+    const gnssRows = [
+      ["Latitude", g.latitude],
+      ["Longitude", g.longitude],
+      ["Altitude", fmt(g.altitude, "m")],
+      ["GNSS Speed", fmt(g.speed, "km/h")],
+      ["Heading / Angle", fmt(g.angle, "°")],
+      ["Visible Satellites", g.satellites],
+      ["GNSS Fix Status", getParam(r, "gnssStatus") === 1 ? "Fix 2D/3D" : fmt(getParam(r, "gnssStatus"))],
+      ["Position DOP (PDOP)", getParam(r, "pdop")],
+      ["Horizontal DOP (HDOP)", getParam(r, "hdop")],
+      ["GSM Signal Strength", fmt(r.gsmSignal, "/ 5")],
+      ["Active GSM Operator Code", getParam(r, "activeGsmOperator") || "—"],
+      ["GSM Cell ID", fmt(r.gsmCellId)],
+      ["Area Code (LAC)", fmt(r.gsmAreaCode)],
+      ["Total Odometer", r.totalOdometer ? `${(r.totalOdometer / 1000).toFixed(3)} km (${r.totalOdometer} m)` : "—"]
+    ];
+    $("tableGnss").innerHTML = gnssRows.map(([k, v]) => `<tr><th>${k}</th><td>${v || "—"}</td></tr>`).join("");
+
+    // Tab 4: Raw IO Lookup
+    const rawIo = r.rawIo || {};
+    const ioKeys = Object.keys(rawIo).sort((a,b) => Number(a) - Number(b));
+    if (ioKeys.length === 0) {
+      $("tableRawIo").innerHTML = '<tr><td colspan="3" class="table-empty">No raw I/O elements.</td></tr>';
+    } else {
+      $("tableRawIo").innerHTML = ioKeys.map(id => {
+        const info = TELTONIKA_IO_NAMES[id] || { name: `AVL ID ${id}`, desc: "Extended / Custom parameter" };
+        let val = rawIo[id];
+        if (typeof val === "object") val = JSON.stringify(val);
+        return `<tr>
+          <td><span class="pill">${id}</span></td>
+          <td><b>${info.name}</b><br><small style="color:var(--text-muted)">${info.desc}</small></td>
+          <td>${val}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    // Tab 5: JSON
+    $("recordJson").textContent = JSON.stringify(r, null, 2);
+  }
+
+  function renderMap(data) {
+    if (!map || !markersLayer) return;
+    markersLayer.clearLayers();
+    if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+
+    const gpsPoints = data.filter(validPoint);
+    $("pointsPill").textContent = `${gpsPoints.length} GPS Points`;
+    $("mapPointsCount").textContent = gpsPoints.length;
+
+    if (!gpsPoints.length) {
+      $("mapFixStatus").textContent = "No GPS fix coordinates";
+      $("mapMaxSpeed").textContent = "0 km/h";
+      $("mapDistance").textContent = "0 km";
+      map.setView([20.5937, 78.9629], 5);
+      return;
+    }
+
+    let maxSpeed = 0;
+    const latLngs = [];
+
+    gpsPoints.forEach((r, idx) => {
+      const g = gpsOf(r);
+      const spd = Number(g.speed) || 0;
+      if (spd > maxSpeed) maxSpeed = spd;
+      const pos = [g.latitude, g.longitude];
+      latLngs.push(pos);
+
+      const isStart = idx === 0;
+      const isEnd = idx === gpsPoints.length - 1;
+      const markerColor = isEnd ? "#10b981" : (isStart ? "#3b82f6" : "#64748b");
+      const radius = isEnd || isStart ? 8 : 4;
+
+      const marker = L.circleMarker(pos, {
+        radius,
+        color: markerColor,
+        fillColor: markerColor,
+        fillOpacity: 0.85,
+        weight: isEnd || isStart ? 3 : 1
+      });
+
+      const vin = getParam(r, "vin");
+      const popupHtml = `
+        <div style="font-family:system-ui; font-size:12px; min-width:180px;">
+          <b>${r.timestamp || "—"}</b><br>
+          ${vin ? `VIN: <code>${vin}</code><br>` : ""}
+          Speed: <b>${g.speed} km/h</b><br>
+          Ignition: <b>${r.ignition ? "ON" : "OFF"}</b><br>
+          Satellites: <b>${g.satellites}</b><br>
+          Voltage: <b>${r.externalVoltage || "—"} V</b>
+        </div>
+      `;
+      marker.bindPopup(popupHtml);
+      marker.on("click", () => {
+        setInspector(r);
+        highlightTableRow(r);
+      });
+      marker.addTo(markersLayer);
+    });
+
+    if (latLngs.length > 1) {
+      routeLine = L.polyline(latLngs, {
+        color: "#3b82f6",
+        weight: 4,
+        opacity: 0.85,
+        lineJoin: "round"
+      }).addTo(map);
+    }
+
+    map.fitBounds(markersLayer.getBounds().pad(0.12), { maxZoom: 16 });
+    $("mapMaxSpeed").textContent = `${maxSpeed} km/h`;
+    $("mapFixStatus").textContent = "3D Fix Active";
+  }
+
+  function getTableHeaders(view) {
+    if (view === "obd") {
+      return `<tr>
+        <th>Time (IST)</th><th>VIN</th><th>OBD Speed</th><th>Engine RPM</th>
+        <th>Coolant °C</th><th>Fuel %</th><th>Engine Load</th><th>Throttle %</th>
+        <th>DTC Faults</th><th>Ext Voltage</th>
+      </tr>`;
+    }
+    if (view === "diagnostics") {
+      return `<tr>
+        <th>Time (IST)</th><th>Satellites</th><th>Alt (m)</th><th>Heading</th>
+        <th>PDOP</th><th>HDOP</th><th>GSM Signal</th><th>Operator</th>
+        <th>Unplug Alert</th><th>Total Odometer</th>
+      </tr>`;
+    }
+    // Default Standard View
+    return `<tr>
+      <th>Time (IST)</th><th>Latitude</th><th>Longitude</th><th>Speed</th>
+      <th>Ignition</th><th>Movement</th><th>Ext Volt</th><th>Bat Volt</th>
+      <th>RPM</th><th>Coolant</th><th>Odometer</th>
+    </tr>`;
+  }
+
+  function renderTableRows(data, view) {
+    const tbody = $("recordsTbody");
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="12" class="table-empty">No records matching view.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.map((r, i) => {
+      const g = gpsOf(r);
+      let cells = "";
+      if (view === "obd") {
+        cells = `
+          <td>${fmt(r.timestamp)}</td>
+          <td><code>${getParam(r, "vin") || "—"}</code></td>
+          <td>${fmt(r.vehicleSpeed ?? r.obdSpeed, "km/h")}</td>
+          <td>${fmt(r.engineRpm)}</td>
+          <td>${fmt(getParam(r, "coolantTemperature"), "°C")}</td>
+          <td>${fmt(r.fuelLevel, "%")}</td>
+          <td>${fmt(r.engineLoad, "%")}</td>
+          <td>${fmt(r.throttlePosition, "%")}</td>
+          <td>${getParam(r, "dtcCount") > 0 ? `<b style="color:var(--danger)">${getParam(r, "dtcCount")} DTC</b>` : "0"}</td>
+          <td>${fmt(r.externalVoltage, "V")}</td>
+        `;
+      } else if (view === "diagnostics") {
+        cells = `
+          <td>${fmt(r.timestamp)}</td>
+          <td>${fmt(g.satellites)}</td>
+          <td>${fmt(g.altitude, "m")}</td>
+          <td>${fmt(g.angle, "°")}</td>
+          <td>${fmt(getParam(r, "pdop"))}</td>
+          <td>${fmt(getParam(r, "hdop"))}</td>
+          <td>${fmt(r.gsmSignal)}</td>
+          <td>${fmt(getParam(r, "activeGsmOperator"))}</td>
+          <td>${getParam(r, "unplugAlert") ? '<span class="kpi-tag danger">UNPLUGGED</span>' : 'OK'}</td>
+          <td>${r.totalOdometer ? (r.totalOdometer / 1000).toFixed(2) + ' km' : "—"}</td>
+        `;
+      } else {
+        cells = `
+          <td>${fmt(r.timestamp)}</td>
+          <td>${fmt(g.latitude)}</td>
+          <td>${fmt(g.longitude)}</td>
+          <td>${fmt(g.speed, "km/h")}</td>
+          <td>${r.ignition != null ? (r.ignition ? '<span class="kpi-tag success">ON</span>' : '<span class="kpi-tag danger">OFF</span>') : "—"}</td>
+          <td>${r.movement != null ? (r.movement ? 'YES' : 'NO') : "—"}</td>
+          <td>${fmt(r.externalVoltage, "V")}</td>
+          <td>${fmt(r.batteryVoltage, "V")}</td>
+          <td>${fmt(r.engineRpm)}</td>
+          <td>${fmt(getParam(r, "coolantTemperature"), "°C")}</td>
+          <td>${r.totalOdometer ? (r.totalOdometer / 1000).toFixed(2) + ' km' : "—"}</td>
+        `;
+      }
+      return `<tr data-idx="${i}">${cells}</tr>`;
+    }).join("");
+
+    tbody.querySelectorAll("tr[data-idx]").forEach(tr => {
+      tr.addEventListener("click", () => {
+        tbody.querySelectorAll("tr").forEach(t => t.classList.remove("selected"));
+        tr.classList.add("selected");
+        const item = data[Number(tr.dataset.idx)];
+        setInspector(item);
+        if (validPoint(item) && map) {
+          const g = gpsOf(item);
+          map.setView([g.latitude, g.longitude], 16);
+        }
+      });
+    });
+  }
+
+  function highlightTableRow(targetRecord) {
+    const tbody = $("recordsTbody");
+    tbody.querySelectorAll("tr").forEach(tr => {
+      const idx = Number(tr.dataset.idx);
+      if (filteredRecords[idx] === targetRecord) {
+        tr.classList.add("selected");
+        tr.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      } else {
+        tr.classList.remove("selected");
+      }
+    });
+  }
+
+  function renderTable() {
+    $("recordsThead").innerHTML = getTableHeaders(currentView);
+    renderTableRows(filteredRecords, currentView);
+    $("tableRowsPill").textContent = `${filteredRecords.length} rows`;
+  }
+
+  function applyFilter() {
+    const q = $("tableSearch").value.trim().toLowerCase();
+    if (!q) {
+      filteredRecords = records;
+    } else {
+      filteredRecords = records.filter(r => {
+        const str = JSON.stringify(r).toLowerCase();
+        return str.includes(q);
+      });
+    }
+    renderTable();
+  }
+
+  async function loadMonths() {
+    const res = await fetch("/api/months");
+    const json = await res.json();
+    monthSelect.innerHTML = "";
+    if (!json.months.length) {
+      monthSelect.innerHTML = '<option value="">No data folders yet</option>';
+      $("loadStatus").textContent = "No daily JSON data found.";
+      return;
+    }
+    monthSelect.innerHTML = json.months.map(m => `<option value="${m}">${m}</option>`).join("");
+    $("downloadMonthExcel").disabled = false;
+    await loadDates();
+  }
+
+  async function loadDates() {
+    const month = monthSelect.value;
+    if (!month) return;
+    const res = await fetch(`/api/dates?month=${encodeURIComponent(month)}`);
+    const json = await res.json();
+    daySelect.innerHTML = "";
+    if (!json.dates || !json.dates.length) {
+      daySelect.innerHTML = '<option value="">No dates</option>';
+      daySelect.disabled = true;
+      $("load").disabled = true;
+      return;
+    }
+    daySelect.innerHTML = json.dates.map(d => `<option value="${d}">${d}</option>`).join("");
+    daySelect.disabled = false;
+    $("load").disabled = false;
+    await loadDate();
+  }
+
+  async function loadDate() {
+    const month = monthSelect.value, day = daySelect.value;
+    if (!month || !day) return;
+    $("loadStatus").textContent = "Loading records…";
+    try {
+      const res = await fetch(`/api/data?month=${encodeURIComponent(month)}&day=${encodeURIComponent(day)}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Could not load date.");
+      records = (json.records || []).sort((a,b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+      filteredRecords = records;
+
+      const latest = records.length ? records[records.length - 1] : null;
+      setKpis(latest, records);
+      setInspector(latest);
+      renderMap(records);
+      renderTable();
+
+      $("downloadJson").disabled = false;
+      $("downloadDateExcel").disabled = false;
+      $("downloadMonthExcel").disabled = false;
+      $("loadStatus").textContent = `${records.length} records loaded successfully`;
+    } catch (err) {
+      $("loadStatus").textContent = `Error: ${err.message}`;
+      records = [];
+      filteredRecords = [];
+      setKpis(null, []);
+      setInspector(null);
+      renderTable();
+    }
+  }
+
+  function download(url) { window.location.href = url; }
+
+  // Event Listeners
+  $("month").addEventListener("change", loadDates);
+  $("load").addEventListener("click", loadDate);
+  $("tableSearch").addEventListener("input", applyFilter);
+  $("downloadJson").addEventListener("click", () => download(`/download/json?month=${encodeURIComponent(monthSelect.value)}&day=${encodeURIComponent(daySelect.value)}`));
+  $("downloadDateExcel").addEventListener("click", () => download(`/download/excel?scope=date&month=${encodeURIComponent(monthSelect.value)}&day=${encodeURIComponent(daySelect.value)}`));
+  $("downloadMonthExcel").addEventListener("click", () => download(`/download/excel?scope=month&month=${encodeURIComponent(monthSelect.value)}`));
+
+  // Tab Switching
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+      btn.classList.add("active");
+      const target = $(btn.dataset.tab);
+      if (target) target.classList.add("active");
+    });
+  });
+
+  // Table View Switching
+  document.querySelectorAll(".view-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".view-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentView = btn.dataset.view;
+      renderTable();
+    });
+  });
+
+  initMap();
+  loadMonths().catch(err => { $("loadStatus").textContent = `Startup error: ${err.message}`; });
+})();
+</script>
+</body>
+</html>

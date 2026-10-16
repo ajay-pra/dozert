@@ -1,0 +1,14 @@
+{
+  "name": "fmc003-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FMC003 daily JSON viewer, downloads, Excel export and GPS map dashboard",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "exceljs": "^4.4.0"
+  }
+}
